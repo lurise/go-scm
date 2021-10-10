@@ -65,16 +65,13 @@ func (t isoTime) String() string {
 
 type milestone struct {
 	ID          int       `json:"id"`
-	IID         int       `json:"iid"`
-	ProjectID   int       `json:"project_id"`
+	IID         int       `json:"number"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
 	State       string    `json:"state"`
-	DueDate     isoTime   `json:"due_date"`
-	StartDate   isoTime   `json:"start_date"`
+	DueDate     isoTime   `json:"due_on"`
 	CreatedAt   null.Time `json:"created_at"`
 	UpdatedAt   null.Time `json:"updated_at"`
-	Expired     bool      `json:"expired"`
 }
 
 type milestoneInput struct {
@@ -85,21 +82,21 @@ type milestoneInput struct {
 }
 
 func (s *milestoneService) Find(ctx context.Context, repo string, id int) (*scm.Milestone, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/milestones/%d", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/milestones/%d", encode(repo), id)
 	out := new(milestone)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertMilestone(out), res, err
 }
 
 func (s *milestoneService) List(ctx context.Context, repo string, opts scm.MilestoneListOptions) ([]*scm.Milestone, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/milestones?%s", encode(repo), encodeMilestoneListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/milestones?%s", encode(repo), encodeMilestoneListOptions(opts))
 	out := []*milestone{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertMilestoneList(out), res, err
 }
 
 func (s *milestoneService) Create(ctx context.Context, repo string, input *scm.MilestoneInput) (*scm.Milestone, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/milestones", encode(repo))
+	path := fmt.Sprintf("api/v5/repos/%s/milestones", encode(repo))
 	dueDateIso := isoTime(input.DueDate)
 	in := &milestoneInput{
 		Title:       &input.Title,
@@ -112,13 +109,13 @@ func (s *milestoneService) Create(ctx context.Context, repo string, input *scm.M
 }
 
 func (s *milestoneService) Delete(ctx context.Context, repo string, id int) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/milestones/%d", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/milestones/%d", encode(repo), id)
 	res, err := s.client.do(ctx, "DELETE", path, nil, nil)
 	return res, err
 }
 
 func (s *milestoneService) Update(ctx context.Context, repo string, id int, input *scm.MilestoneInput) (*scm.Milestone, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/milestones/%d", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/milestones/%d", encode(repo), id)
 	in := &milestoneInput{}
 	if input.Title != "" {
 		in.Title = &input.Title

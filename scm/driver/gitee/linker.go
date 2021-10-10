@@ -20,10 +20,10 @@ func (l *linker) Resource(ctx context.Context, repo string, ref scm.Reference) (
 	switch {
 	case scm.IsTag(ref.Path):
 		t := scm.TrimRef(ref.Path)
-		return fmt.Sprintf("%s%s/-/tags/%s", l.base, repo, t), nil
+		return fmt.Sprintf("%s%s/tree/%s", l.base, repo, t), nil
 	case scm.IsPullRequest(ref.Path):
 		d := scm.ExtractPullRequest(ref.Path)
-		return fmt.Sprintf("%s%s/merge_requests/%d", l.base, repo, d), nil
+		return fmt.Sprintf("%s%s/pulls/%d", l.base, repo, d), nil
 	case ref.Sha == "":
 		t := scm.TrimRef(ref.Path)
 		return fmt.Sprintf("%s%s/tree/%s", l.base, repo, t), nil
@@ -36,7 +36,7 @@ func (l *linker) Resource(ctx context.Context, repo string, ref scm.Reference) (
 func (l *linker) Diff(ctx context.Context, repo string, source, target scm.Reference) (string, error) {
 	if scm.IsPullRequest(target.Path) {
 		d := scm.ExtractPullRequest(target.Path)
-		return fmt.Sprintf("%s%s/merge_requests/%d/diffs", l.base, repo, d), nil
+		return fmt.Sprintf("%s%s/pulls/%d/commits", l.base, repo, d), nil
 	}
 
 	s := source.Sha

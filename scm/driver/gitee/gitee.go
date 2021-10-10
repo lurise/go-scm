@@ -47,7 +47,7 @@ func New(uri string) (*scm.Client, error) {
 // NewDefault returns a new GitLab API client using the
 // default gitlab.com address.
 func NewDefault() *scm.Client {
-	client, _ := New("https://gitlab.com")
+	client, _ := New("https://gitee.com")
 	return client
 }
 

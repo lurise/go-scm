@@ -74,7 +74,7 @@ func encodeIssueListOptions(opts scm.IssueListOptions) string {
 	} else if opts.Closed {
 		params.Set("state", "closed")
 	} else if opts.Open {
-		params.Set("state", "opened")
+		params.Set("state", "open")
 	}
 	return params.Encode()
 }
