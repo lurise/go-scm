@@ -17,22 +17,26 @@ import (
 )
 
 type repository struct {
-	ID            int         `json:"id"`
-	Path          string      `json:"path"`
-	PathNamespace string      `json:"path_with_namespace"`
-	DefaultBranch string      `json:"default_branch"`
-	Visibility    string      `json:"visibility"`
-	WebURL        string      `json:"web_url"`
-	SSHURL        string      `json:"ssh_url_to_repo"`
-	HTTPURL       string      `json:"http_url_to_repo"`
-	Namespace     namespace   `json:"namespace"`
-	Permissions   permissions `json:"permissions"`
+	ID            int       `json:"id"`
+	Path          string    `json:"path"`
+	PathNamespace string    `json:"path_with_namespace"`
+	DefaultBranch string    `json:"default_branch"`
+	Private       bool      `json:"private"`
+	WebURL        string    `json:"url"`
+	SSHURL        string    `json:"ssh_url"`
+	HTTPURL       string    `json:"html_url"`
+	Namespace     namespace `json:"namespace"`
+	Permissions   struct {
+		Pull  bool `json:"pull"`
+		Push  bool `json:"push"`
+		Admin bool `json:"admin"`
+	} `json:"permissions"`
 }
 
 type namespace struct {
 	Name     string `json:"name"`
 	Path     string `json:"path"`
-	FullPath string `json:"full_path"`
+	FullPath string `json:"html_url"`
 }
 
 type permissions struct {
@@ -46,19 +50,20 @@ type access struct {
 }
 
 type hook struct {
-	ID                    int       `json:"id"`
-	URL                   string    `json:"url"`
-	ProjectID             int       `json:"project_id"`
-	PushEvents            bool      `json:"push_events"`
-	IssuesEvents          bool      `json:"issues_events"`
-	MergeRequestsEvents   bool      `json:"merge_requests_events"`
-	TagPushEvents         bool      `json:"tag_push_events"`
-	NoteEvents            bool      `json:"note_events"`
-	JobEvents             bool      `json:"job_events"`
-	PipelineEvents        bool      `json:"pipeline_events"`
-	WikiPageEvents        bool      `json:"wiki_page_events"`
-	EnableSslVerification bool      `json:"enable_ssl_verification"`
-	CreatedAt             time.Time `json:"created_at"`
+	ID                  int    `json:"id"`
+	URL                 string `json:"url"`
+	ProjectID           int    `json:"project_id"`
+	PushEvents          bool   `json:"push_events"`
+	IssuesEvents        bool   `json:"issues_events"`
+	MergeRequestsEvents bool   `json:"merge_requests_events"`
+	TagPushEvents       bool   `json:"tag_push_events"`
+	NoteEvents          bool   `json:"note_events"`
+	//JobEvents             bool      `json:"job_events"`
+	//PipelineEvents        bool      `json:"pipeline_events"`
+	//WikiPageEvents        bool      `json:"wiki_page_events"`
+	//EnableSslVerification bool      `json:"enable_ssl_verification"`
+	Password  string    `json:"password"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type repositoryService struct {
@@ -66,42 +71,42 @@ type repositoryService struct {
 }
 
 func (s *repositoryService) Find(ctx context.Context, repo string) (*scm.Repository, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s", encode(repo))
+	path := fmt.Sprintf("api/v5/repos/%s", encode(repo))
 	out := new(repository)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertRepository(out), res, err
 }
 
 func (s *repositoryService) FindHook(ctx context.Context, repo string, id string) (*scm.Hook, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/hooks/%s", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/hooks/%s", encode(repo), id)
 	out := new(hook)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertHook(out), res, err
 }
 
 func (s *repositoryService) FindPerms(ctx context.Context, repo string) (*scm.Perm, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s", encode(repo))
+	path := fmt.Sprintf("api/v5/repos/%s", encode(repo))
 	out := new(repository)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertRepository(out).Perm, res, err
 }
 
 func (s *repositoryService) List(ctx context.Context, opts scm.ListOptions) ([]*scm.Repository, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects?%s", encodeMemberListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos?%s", encodeMemberListOptions(opts))
 	out := []*repository{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertRepositoryList(out), res, err
 }
 
 func (s *repositoryService) ListHooks(ctx context.Context, repo string, opts scm.ListOptions) ([]*scm.Hook, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/hooks?%s", encode(repo), encodeListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/hooks?%s", encode(repo), encodeListOptions(opts))
 	out := []*hook{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertHookList(out), res, err
 }
 
 func (s *repositoryService) ListStatus(ctx context.Context, repo, ref string, opts scm.ListOptions) ([]*scm.Status, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/repository/commits/%s/statuses?%s", encode(repo), ref, encodeListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/repository/commits/%s/statuses?%s", encode(repo), ref, encodeListOptions(opts))
 	out := []*status{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertStatusList(out), res, err
@@ -136,7 +141,7 @@ func (s *repositoryService) CreateHook(ctx context.Context, repo string, input *
 		params.Set("tag_push_events", "true")
 	}
 
-	path := fmt.Sprintf("api/v4/projects/%s/hooks?%s", encode(repo), params.Encode())
+	path := fmt.Sprintf("api/v5/repos/%s/hooks?%s", encode(repo), params.Encode())
 	out := new(hook)
 	res, err := s.client.do(ctx, "POST", path, nil, out)
 	return convertHook(out), res, err
@@ -147,7 +152,7 @@ func (s *repositoryService) CreateStatus(ctx context.Context, repo, ref string, 
 	params.Set("state", convertFromState(input.State))
 	params.Set("name", input.Label)
 	params.Set("target_url", input.Target)
-	path := fmt.Sprintf("api/v4/projects/%s/statuses/%s?%s", encode(repo), ref, params.Encode())
+	path := fmt.Sprintf("api/v5/repos/%s/statuses/%s?%s", encode(repo), ref, params.Encode())
 	out := new(status)
 	res, err := s.client.do(ctx, "POST", path, nil, out)
 	return convertStatus(out), res, err
@@ -158,7 +163,7 @@ func (s *repositoryService) UpdateHook(ctx context.Context, repo string, id stri
 }
 
 func (s *repositoryService) DeleteHook(ctx context.Context, repo string, id string) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/hooks/%s", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/hooks/%s", encode(repo), id)
 	return s.client.do(ctx, "DELETE", path, nil, nil)
 }
 
@@ -180,15 +185,15 @@ func convertRepository(from *repository) *scm.Repository {
 		Namespace:  from.Namespace.Path,
 		Name:       from.Path,
 		Branch:     from.DefaultBranch,
-		Private:    convertPrivate(from.Visibility),
-		Visibility: convertVisibility(from.Visibility),
+		Private:    from.Private,
+		Visibility: convertVisibility(from.Private),
 		Clone:      from.HTTPURL,
 		CloneSSH:   from.SSHURL,
 		Link:       from.WebURL,
 		Perm: &scm.Perm{
-			Pull:  true,
-			Push:  canPush(from),
-			Admin: canAdmin(from),
+			Pull:  from.Permissions.Pull,
+			Push:  from.Permissions.Push,
+			Admin: from.Permissions.Admin,
 		},
 	}
 	if path := from.Namespace.FullPath; path != "" {
@@ -216,8 +221,12 @@ func convertHook(from *hook) *scm.Hook {
 		Active:     true,
 		Target:     from.URL,
 		Events:     convertEvents(from),
-		SkipVerify: !from.EnableSslVerification,
+		SkipVerify: convertVerify(from),
 	}
+}
+
+func convertVerify(from *hook) bool {
+	return from.Password != ""
 }
 
 type status struct {
@@ -309,14 +318,12 @@ func convertPrivate(from string) bool {
 	}
 }
 
-func convertVisibility(from string) scm.Visibility {
+func convertVisibility(from bool) scm.Visibility {
 	switch from {
-	case "public":
+	case true:
 		return scm.VisibilityPublic
-	case "private":
+	case false:
 		return scm.VisibilityPrivate
-	case "internal":
-		return scm.VisibilityInternal
 	default:
 		return scm.VisibilityUndefined
 	}

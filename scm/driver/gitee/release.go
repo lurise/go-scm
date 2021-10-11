@@ -29,8 +29,15 @@ type releaseInput struct {
 	Tag         string `json:"tag_name"`
 }
 
+type releasePatch struct {
+	TagName    string `json:"tag_name"`
+	Name       string `json:"name"`
+	Body       string `json:"body"`
+	Prerelease bool   `json:"prerelease"`
+}
+
 func (s *releaseService) Find(ctx context.Context, repo string, id int) (*scm.Release, *scm.Response, error) {
-	url := fmt.Sprintf("api/v5/repos/%s/releases/%s", repo, id)
+	url := fmt.Sprintf("api/v5/repos/%s/releases/%d", repo, id)
 	out := new(release)
 	res, err := s.client.do(ctx, "GET", url, nil, out)
 	return convertRelease(out), res, err
@@ -63,34 +70,32 @@ func (s *releaseService) Create(ctx context.Context, repo string, input *scm.Rel
 }
 
 func (s *releaseService) Delete(ctx context.Context, repo string, id int) (*scm.Response, error) {
-	return nil, scm.ErrNotSupported
+	path := fmt.Sprintf("api/v5/repos/%s/released/%d", repo, id)
+	res, err := s.client.do(ctx, "DELETE", path, nil, nil)
+	return res, err
 }
 
 func (s *releaseService) DeleteByTag(ctx context.Context, repo string, tag string) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v5/repos/%s/releases/%s", encode(repo), tag)
-	return s.client.do(ctx, "DELETE", path, nil, nil)
+
+	return nil, scm.ErrNotSupported
 }
 
 func (s *releaseService) Update(ctx context.Context, repo string, id int, input *scm.ReleaseInput) (*scm.Release, *scm.Response, error) {
 	// this could be implemented by List and filter but would be to expensive
-	panic("gitlab only allows to update a release by tag")
+	path := fmt.Sprintf("api/v5/repos/%s/releases/%d", repo, id)
+	in := releasePatch{
+		TagName: input.Tag,
+		Name:    input.Title,
+		Body:    input.Description,
+	}
+	out := new(release)
+	res, err := s.client.do(ctx, "PATCH", path, in, out)
+	return convertRelease(out), res, err
 }
 
 func (s *releaseService) UpdateByTag(ctx context.Context, repo string, tag string, input *scm.ReleaseInput) (*scm.Release, *scm.Response, error) {
-	path := fmt.Sprintf("api/v5/repos/%s/releases/%s", encode(repo), tag)
-	in := &releaseInput{}
-	if input.Title != "" {
-		in.Title = input.Title
-	}
-	if input.Description != "" {
-		in.Description = input.Description
-	}
-	if input.Tag != "" {
-		in.Tag = input.Tag
-	}
-	out := new(release)
-	res, err := s.client.do(ctx, "PUT", path, in, out)
-	return convertRelease(out), res, err
+
+	return nil, nil, scm.ErrNotSupported
 }
 
 func convertReleaseList(from []*release) []*scm.Release {
