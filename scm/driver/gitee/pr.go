@@ -7,7 +7,6 @@ package gitee
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/drone/go-scm/scm"
@@ -18,105 +17,144 @@ type pullService struct {
 }
 
 func (s *pullService) Find(ctx context.Context, repo string, number int) (*scm.PullRequest, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d", encode(repo), number)
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d", encode(repo), number)
 	out := new(pr)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertPullRequest(out), res, err
 }
 
 func (s *pullService) FindComment(ctx context.Context, repo string, index, id int) (*scm.Comment, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/notes/%d", encode(repo), index, id)
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/comments/%d", encode(repo), id)
 	out := new(issueComment)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	return convertIssueComment(out), res, err
 }
 
 func (s *pullService) List(ctx context.Context, repo string, opts scm.PullRequestListOptions) ([]*scm.PullRequest, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests?%s", encode(repo), encodePullRequestListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/pulls?%s", encode(repo), encodePullRequestListOptions(opts))
 	out := []*pr{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertPullRequestList(out), res, err
 }
 
 func (s *pullService) ListChanges(ctx context.Context, repo string, number int, opts scm.ListOptions) ([]*scm.Change, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/changes?%s", encode(repo), number, encodeListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/files?%s", encode(repo), number, encodeListOptions(opts))
 	out := new(changes)
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertChangeList(out.Changes), res, err
 }
 
 func (s *pullService) ListComments(ctx context.Context, repo string, index int, opts scm.ListOptions) ([]*scm.Comment, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/notes?%s", encode(repo), index, encodeListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/comments", encode(repo), index, encodeListOptions(opts))
 	out := []*issueComment{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertIssueCommentList(out), res, err
 }
 
 func (s *pullService) ListCommits(ctx context.Context, repo string, number int, opts scm.ListOptions) ([]*scm.Commit, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/commits?%s", encode(repo), number, encodeListOptions(opts))
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/commits", encode(repo), number, nil)
 	out := []*commit{}
 	res, err := s.client.do(ctx, "GET", path, nil, &out)
 	return convertCommitList(out), res, err
 }
 
 func (s *pullService) Create(ctx context.Context, repo string, input *scm.PullRequestInput) (*scm.PullRequest, *scm.Response, error) {
-	in := url.Values{}
-	in.Set("title", input.Title)
-	in.Set("description", input.Body)
-	in.Set("source_branch", input.Source)
-	in.Set("target_branch", input.Target)
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests?%s", encode(repo), in.Encode())
+	//in := url.Values{}
+	//in.Set("title", input.Title)
+	//in.Set("description", input.Body)
+	//in.Set("source_branch", input.Source)
+	//in.Set("target_branch", input.Target)
+	in := prCreate{
+		Title: input.Title,
+		Head:  input.Source,
+		Body:  input.Body,
+		Base:  input.Target,
+	}
+	path := fmt.Sprintf("api/v5/repos/%s/pulls", encode(repo))
 	out := new(pr)
-	res, err := s.client.do(ctx, "POST", path, nil, out)
+	res, err := s.client.do(ctx, "POST", path, in, out)
 	return convertPullRequest(out), res, err
 }
 
 func (s *pullService) CreateComment(ctx context.Context, repo string, index int, input *scm.CommentInput) (*scm.Comment, *scm.Response, error) {
-	in := url.Values{}
-	in.Set("body", input.Body)
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/notes?%s", encode(repo), index, in.Encode())
+	//in := url.Values{}
+	//in.Set("body", input.Body)
+	in := issueCommentCreate{
+		Body: input.Body,
+	}
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/comments", encode(repo), index)
 	out := new(issueComment)
-	res, err := s.client.do(ctx, "POST", path, nil, out)
+	res, err := s.client.do(ctx, "POST", path, in, out)
 	return convertIssueComment(out), res, err
 }
 
 func (s *pullService) DeleteComment(ctx context.Context, repo string, index, id int) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/notes/%d", encode(repo), index, id)
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/comments/%d", encode(repo), index, id)
 	res, err := s.client.do(ctx, "DELETE", path, nil, nil)
 	return res, err
 }
 
 func (s *pullService) Merge(ctx context.Context, repo string, number int) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d/merge", encode(repo), number)
+	path := fmt.Sprintf("api/v5/repos/%s/pulls/%d/merge", encode(repo), number)
 	res, err := s.client.do(ctx, "PUT", path, nil, nil)
 	return res, err
 }
 
 func (s *pullService) Close(ctx context.Context, repo string, number int) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v4/projects/%s/merge_requests/%d?state_event=closed", encode(repo), number)
-	res, err := s.client.do(ctx, "PUT", path, nil, nil)
-	return res, err
+	//path := fmt.Sprintf("api/v5/repos/%s/pulls/%d?state_event=closed", encode(repo), number)
+	//res, err := s.client.do(ctx, "PUT", path, nil, nil)
+	return nil, scm.ErrNotSupported
 }
 
 type pr struct {
-	Number int    `json:"iid"`
-	Sha    string `json:"sha"`
-	Title  string `json:"title"`
-	Desc   string `json:"description"`
-	State  string `json:"state"`
-	Link   string `json:"web_url"`
-	Author struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Name     string `json:"name"`
-		Avatar   string `json:"avatar_url"`
-	}
-	SourceBranch string    `json:"source_branch"`
-	TargetBranch string    `json:"target_branch"`
-	Created      time.Time `json:"created_at"`
-	Updated      time.Time `json:"updated_at"`
-	Closed       time.Time
-	Labels       []string `json:"labels"`
+	ID                int    `json:"id"`
+	URL               string `json:"url"`
+	HtmlUrl           string `json:"html_url"`
+	DiffUrl           string `json:"diff_url"`
+	PatchUrl          string `json:"patch_url"`
+	IssueUrl          string `json:"issue_url"`
+	CommitsUrl        string `json:"commits_url"`
+	ReviewCommentsUrl string `json:"review_comments_url"`
+	ReviewCommentUrl  string `json:"review_comment_url"`
+	CommentsUrl       string `json:"comments_url"`
+	Number            int    `json:"number"`
+	State             string `json:"state"`
+	Title             string `json:"title"`
+	Body              string `json:"body"`
+	User              struct {
+		Login     string `json:"login"`
+		Name      string `json:"name"`
+		AvatarUrl string `json:"avatar_url"`
+	} `json:"user"`
+	Head struct {
+		Ref string `json:"ref"`
+	} `json:"head"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+
+	Created time.Time `json:"created_at"`
+	Updated time.Time `json:"updated_at"`
+	Closed  time.Time `json:"closed_at"`
+	Labels  []struct {
+		Id   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"labels"`
+}
+
+type prCreate struct {
+	Title             string `json:"title"`
+	Head              string `json:"head"`
+	Base              string `json:"base"`
+	Body              string `json:"body"`
+	MilestoneNumber   int    `json:"milestone_number"`
+	Labels            string `json:"labels"`
+	Issue             string `json:"issue"`
+	Assignees         string `json:"assignees"`
+	Testers           string `json:"testers"`
+	AssigneesNumber   int    `json:"assignees_number"`
+	TestersNumber     int    `json:"testers_number"`
+	PruneSourceBranch bool   `json:"prune_source_branch"`
 }
 
 type changes struct {
@@ -142,24 +180,24 @@ func convertPullRequest(from *pr) *scm.PullRequest {
 	var labels []scm.Label
 	for _, label := range from.Labels {
 		labels = append(labels, scm.Label{
-			Name: label,
+			Name: label.Name,
 		})
 	}
 	return &scm.PullRequest{
 		Number: from.Number,
 		Title:  from.Title,
-		Body:   from.Desc,
-		Sha:    from.Sha,
+		Body:   from.Body,
+		Sha:    nil,
 		Ref:    fmt.Sprintf("refs/merge-requests/%d/head", from.Number),
-		Source: from.SourceBranch,
-		Target: from.TargetBranch,
-		Link:   from.Link,
+		Source: from.Head.Ref,
+		Target: from.Base.Ref,
+		Link:   from.URL,
 		Closed: from.State != "opened",
 		Merged: from.State == "merged",
 		Author: scm.User{
-			Name:   from.Author.Name,
-			Login:  from.Author.Username,
-			Avatar: from.Author.Avatar,
+			Name:   from.User.Name,
+			Login:  from.User.Login,
+			Avatar: from.User.AvatarUrl,
 		},
 		Created: from.Created,
 		Updated: from.Updated,

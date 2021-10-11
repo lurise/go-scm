@@ -137,6 +137,13 @@ type issueComment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type issueCommentCreate struct {
+	Body     string `json:"body"`
+	CommitId string `json:"commit_id"`
+	Path     string `json:"path"`
+	Position string `json:"position"`
+}
+
 type issueCommentInput struct {
 	Body string `json:"body"`
 }

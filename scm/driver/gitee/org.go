@@ -6,8 +6,6 @@ package gitee
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/drone/go-scm/scm"
 	"github.com/drone/go-scm/scm/driver/internal/null"
 )
@@ -17,10 +15,7 @@ type organizationService struct {
 }
 
 func (s *organizationService) Find(ctx context.Context, name string) (*scm.Organization, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/groups/%s", name)
-	out := new(organization)
-	res, err := s.client.do(ctx, "GET", path, nil, out)
-	return convertOrganization(out), res, err
+	return nil, nil, scm.ErrNotSupported
 }
 
 func (s *organizationService) FindMembership(ctx context.Context, name, username string) (*scm.Membership, *scm.Response, error) {
@@ -28,10 +23,7 @@ func (s *organizationService) FindMembership(ctx context.Context, name, username
 }
 
 func (s *organizationService) List(ctx context.Context, opts scm.ListOptions) ([]*scm.Organization, *scm.Response, error) {
-	path := fmt.Sprintf("api/v4/groups?%s", encodeListOptions(opts))
-	out := []*organization{}
-	res, err := s.client.do(ctx, "GET", path, nil, &out)
-	return convertOrganizationList(out), res, err
+	return nil, nil, scm.ErrNotSupported
 }
 
 type organization struct {
