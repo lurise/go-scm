@@ -7,7 +7,6 @@ package gitee
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +65,17 @@ type hook struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type hookCreate struct {
+	Url                 string `json:"url"`
+	EncryptionType      int    `json:"encryption_type"`
+	Password            string `json:"password"`
+	PushEvents          bool   `json:"push_events"`
+	TagPushEvents       bool   `json:"tag_push_events"`
+	IssuesEvents        bool   `json:"issues_events"`
+	NoteEvents          bool   `json:"note_events"`
+	MergeRequestsEvents bool   `json:"merge_requests_events"`
+}
+
 type repositoryService struct {
 	client *wrapper
 }
@@ -106,64 +116,61 @@ func (s *repositoryService) ListHooks(ctx context.Context, repo string, opts scm
 }
 
 func (s *repositoryService) ListStatus(ctx context.Context, repo, ref string, opts scm.ListOptions) ([]*scm.Status, *scm.Response, error) {
-	path := fmt.Sprintf("api/v5/repos/%s/repository/commits/%s/statuses?%s", encode(repo), ref, encodeListOptions(opts))
-	out := []*status{}
-	res, err := s.client.do(ctx, "GET", path, nil, &out)
-	return convertStatusList(out), res, err
+
+	return nil, nil, scm.ErrNotSupported
 }
 
 func (s *repositoryService) CreateHook(ctx context.Context, repo string, input *scm.HookInput) (*scm.Hook, *scm.Response, error) {
-	params := url.Values{}
-	params.Set("url", input.Target)
-	if input.Secret != "" {
-		params.Set("token", input.Secret)
+	in := hookCreate{
+		Url:                 input.Target,
+		PushEvents:          input.Events.Push || input.Events.Branch,
+		TagPushEvents:       input.Events.Tag,
+		IssuesEvents:        input.Events.Issue,
+		MergeRequestsEvents: input.Events.PullRequest,
+		NoteEvents:          input.Events.IssueComment || input.Events.PullRequestComment,
 	}
 	if input.SkipVerify {
-		params.Set("enable_ssl_verification", "false")
-	}
-	if input.Events.Branch {
-		// no-op
-	}
-	if input.Events.Issue {
-		params.Set("issues_events", "true")
-	}
-	if input.Events.IssueComment ||
-		input.Events.PullRequestComment {
-		params.Set("note_events", "true")
-	}
-	if input.Events.PullRequest {
-		params.Set("merge_requests_events", "true")
-	}
-	if input.Events.Push || input.Events.Branch {
-		params.Set("push_events", "true")
-	}
-	if input.Events.Tag {
-		params.Set("tag_push_events", "true")
+		in.EncryptionType = 0
+	} else {
+		in.EncryptionType = 1
+		in.Password = input.Secret
 	}
 
-	path := fmt.Sprintf("api/v5/repos/%s/hooks?%s", encode(repo), params.Encode())
+	path := fmt.Sprintf("api/v5/repos/%s/hooks", encode(repo))
 	out := new(hook)
-	res, err := s.client.do(ctx, "POST", path, nil, out)
+	res, err := s.client.do(ctx, "POST", path, in, out)
 	return convertHook(out), res, err
 }
 
 func (s *repositoryService) CreateStatus(ctx context.Context, repo, ref string, input *scm.StatusInput) (*scm.Status, *scm.Response, error) {
-	params := url.Values{}
-	params.Set("state", convertFromState(input.State))
-	params.Set("name", input.Label)
-	params.Set("target_url", input.Target)
-	path := fmt.Sprintf("api/v5/repos/%s/statuses/%s?%s", encode(repo), ref, params.Encode())
-	out := new(status)
-	res, err := s.client.do(ctx, "POST", path, nil, out)
-	return convertStatus(out), res, err
-}
 
-func (s *repositoryService) UpdateHook(ctx context.Context, repo string, id string, input *scm.HookInput) (*scm.Hook, *scm.Response, error) {
 	return nil, nil, scm.ErrNotSupported
 }
 
+func (s *repositoryService) UpdateHook(ctx context.Context, repo string, id string, input *scm.HookInput) (*scm.Hook, *scm.Response, error) {
+	path := fmt.Sprintf("api/v5/repos/%s/hooks/%s", repo, id)
+	in := hookCreate{
+		Url:                 input.Target,
+		PushEvents:          input.Events.Push || input.Events.Branch,
+		TagPushEvents:       input.Events.Tag,
+		IssuesEvents:        input.Events.Issue,
+		MergeRequestsEvents: input.Events.PullRequest,
+		NoteEvents:          input.Events.IssueComment || input.Events.PullRequestComment,
+	}
+	if input.SkipVerify {
+		in.EncryptionType = 0
+	} else {
+		in.EncryptionType = 1
+		in.Password = input.Secret
+	}
+
+	out := new(hook)
+	res, err := s.client.do(ctx, "PATCH", path, in, out)
+	return convertHook(out), res, err
+}
+
 func (s *repositoryService) DeleteHook(ctx context.Context, repo string, id string) (*scm.Response, error) {
-	path := fmt.Sprintf("api/v5/repos/%s/hooks/%s", encode(repo), id)
+	path := fmt.Sprintf("api/v5/repos/%s/hooks/%s", repo, id)
 	return s.client.do(ctx, "DELETE", path, nil, nil)
 }
 
@@ -329,24 +336,24 @@ func convertVisibility(from bool) scm.Visibility {
 	}
 }
 
-func canPush(proj *repository) bool {
-	switch {
-	case proj.Permissions.ProjectAccess.AccessLevel >= 30:
-		return true
-	case proj.Permissions.GroupAccess.AccessLevel >= 30:
-		return true
-	default:
-		return false
-	}
-}
-
-func canAdmin(proj *repository) bool {
-	switch {
-	case proj.Permissions.ProjectAccess.AccessLevel >= 40:
-		return true
-	case proj.Permissions.GroupAccess.AccessLevel >= 40:
-		return true
-	default:
-		return false
-	}
-}
+//func canPush(proj *repository) bool {
+//	switch {
+//	case proj.Permissions.Push.AccessLevel >= 30:
+//		return true
+//	case proj.Permissions.GroupAccess.AccessLevel >= 30:
+//		return true
+//	default:
+//		return false
+//	}
+//}
+//
+//func canAdmin(proj *repository) bool {
+//	switch {
+//	case proj.Permissions.ProjectAccess.AccessLevel >= 40:
+//		return true
+//	case proj.Permissions.GroupAccess.AccessLevel >= 40:
+//		return true
+//	default:
+//		return false
+//	}
+//}
