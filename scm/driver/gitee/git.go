@@ -116,9 +116,11 @@ type Author struct {
 }
 
 type Committer struct {
-	Name  string    `json:"name"`
-	Date  time.Time `json:"date"`
-	Email string    `json:"email"`
+	Name     string    `json:"name"`
+	Date     time.Time `json:"date"`
+	Username string    `json:"username"`
+	UserName string    `json:"user_name"`
+	Email    string    `json:"email"`
 }
 
 type tree struct {

@@ -28,7 +28,7 @@ func (s *webhookService) Parse(req *http.Request, fn scm.SecretFunc) (scm.Webhoo
 	}
 
 	var hook scm.Webhook
-	switch req.Header.Get("X-Gitlab-Event") {
+	switch req.Header.Get("X-Gitee-Event") {
 	case "Push Hook", "Tag Push Hook":
 		hook, err = parsePushHook(data)
 	case "Issue Hook":
@@ -66,19 +66,19 @@ func parsePushHook(data []byte) (scm.Webhook, error) {
 		return nil, err
 	}
 	switch {
-	case src.ObjectKind == "push" && src.Before == "0000000000000000000000000000000000000000":
+	case src.HookName == "push_hooks" && src.Before == "0000000000000000000000000000000000000000":
 		// TODO we previously considered returning a
 		// branch creation hook, however, the push hook
 		// returns more metadata (commit details).
 		return convertPushHook(src), nil
-	case src.ObjectKind == "push" && src.After == "0000000000000000000000000000000000000000":
-		return converBranchHook(src), nil
-	case src.ObjectKind == "tag_push" && src.Before == "0000000000000000000000000000000000000000":
+	//case src.HookName == "push_hooks" && src.After == "0000000000000000000000000000000000000000":
+	//	return converBranchHook(src), nil
+	case src.HookName == "tag_push_hooks" && src.Before == "0000000000000000000000000000000000000000":
 		// TODO we previously considered returning a
 		// tag creation hook, however, the push hook
 		// returns more metadata (commit details).
 		return convertPushHook(src), nil
-	case src.ObjectKind == "tag_push" && src.After == "0000000000000000000000000000000000000000":
+	case src.HookName == "tag_push_hooks" && src.After == "0000000000000000000000000000000000000000":
 		return convertTagHook(src), nil
 	default:
 		return convertPushHook(src), nil
@@ -121,50 +121,45 @@ func convertPushHook(src *pushHook) *scm.PushHook {
 				},
 			})
 	}
-	namespace, name := scm.Split(src.Project.PathWithNamespace)
+	//namespace, name := scm.Split(src.Project.PathWithNamespace)
 	dst := &scm.PushHook{
-		Ref:    scm.ExpandRef(src.Ref, "refs/heads/"),
+		Ref:    src.Ref,
 		Before: src.Before,
 		After:  src.After,
 		Repo: scm.Repository{
-			ID:        strconv.Itoa(src.Project.ID),
-			Namespace: namespace,
-			Name:      name,
-			Clone:     src.Project.GitHTTPURL,
-			CloneSSH:  src.Project.GitSSHURL,
-			Link:      src.Project.WebURL,
-			Branch:    src.Project.DefaultBranch,
-			Private:   false, // TODO how do we correctly set Private vs Public?
+			ID:        src.Repository.ID,
+			Namespace: src.Repository.NameSpace,
+			Name:      src.Repository.Name,
+			Clone:     src.Repository.GitUrl,
+			CloneSSH:  src.Repository.SshUrl,
+			Link:      src.Repository.HtmlUrl,
+			Branch:    src.Repository.DefaultBranch,
+			Private:   src.Repository.Private,
 		},
 		Commit: scm.Commit{
-			Sha:     src.CheckoutSha,
-			Message: "", // NOTE this is set below
+			Sha:     src.HeadCommit.ID,
+			Message: src.HeadCommit.Message, // NOTE this is set below
 			Author: scm.Signature{
-				Login:  src.UserUsername,
-				Name:   src.UserName,
-				Email:  src.UserEmail,
-				Avatar: src.UserAvatar,
+				Login:  src.HeadCommit.Author.UserName,
+				Name:   src.HeadCommit.Author.Name,
+				Email:  src.HeadCommit.Author.Email,
+				Avatar: "",
 			},
 			Committer: scm.Signature{
-				Login:  src.UserUsername,
-				Name:   src.UserName,
-				Email:  src.UserEmail,
-				Avatar: src.UserAvatar,
+				Login:  src.HeadCommit.Committer.UserName,
+				Name:   src.HeadCommit.Committer.Name,
+				Email:  src.HeadCommit.Committer.Email,
+				Avatar: "",
 			},
-			Link: "", // NOTE this is set below
+			Link: src.HeadCommit.Url, // NOTE this is set below
 		},
 		Sender: scm.User{
-			Login:  src.UserUsername,
-			Name:   src.UserName,
-			Email:  src.UserEmail,
-			Avatar: src.UserAvatar,
+			Login:  src.Sender.Login,
+			Name:   src.Sender.Name,
+			Email:  src.Sender.Email,
+			Avatar: src.Sender.AvatarUrl,
 		},
 		Commits: commits,
-	}
-	if len(src.Commits) > 0 {
-		// get the last commit (most recent)
-		dst.Commit.Message = src.Commits[len(src.Commits)-1].Message
-		dst.Commit.Link = src.Commits[len(src.Commits)-1].URL
 	}
 	return dst
 }
@@ -194,10 +189,10 @@ func converBranchHook(src *pushHook) *scm.BranchHook {
 			Private:   false, // TODO how do we correctly set Private vs Public?
 		},
 		Sender: scm.User{
-			Login:  src.UserUsername,
-			Name:   src.UserName,
-			Email:  src.UserEmail,
-			Avatar: src.UserAvatar,
+			Login:  src.Sender.Login,
+			Name:   src.Sender.Name,
+			Email:  src.Sender.Email,
+			Avatar: src.Sender.AvatarUrl,
 		},
 	}
 }
@@ -209,7 +204,6 @@ func convertTagHook(src *pushHook) *scm.TagHook {
 		action = scm.ActionDelete
 		commit = src.Before
 	}
-	namespace, name := scm.Split(src.Project.PathWithNamespace)
 	return &scm.TagHook{
 		Action: action,
 		Ref: scm.Reference{
@@ -217,20 +211,20 @@ func convertTagHook(src *pushHook) *scm.TagHook {
 			Sha:  commit,
 		},
 		Repo: scm.Repository{
-			ID:        strconv.Itoa(src.Project.ID),
-			Namespace: namespace,
-			Name:      name,
-			Clone:     src.Project.GitHTTPURL,
-			CloneSSH:  src.Project.GitSSHURL,
-			Link:      src.Project.WebURL,
-			Branch:    src.Project.DefaultBranch,
-			Private:   false, // TODO how do we correctly set Private vs Public?
+			ID:        src.Repository.ID,
+			Namespace: src.Repository.NameSpace,
+			Name:      src.Repository.Name,
+			Clone:     src.Repository.GitUrl,
+			CloneSSH:  src.Repository.SshUrl,
+			Link:      src.Repository.HtmlUrl,
+			Branch:    src.Repository.DefaultBranch,
+			Private:   src.Repository.Private,
 		},
 		Sender: scm.User{
-			Login:  src.UserUsername,
-			Name:   src.UserName,
-			Email:  src.UserEmail,
-			Avatar: src.UserAvatar,
+			Login:  src.Sender.Login,
+			Name:   src.Sender.Name,
+			Email:  src.Sender.Email,
+			Avatar: src.Sender.AvatarUrl,
 		},
 	}
 }
@@ -298,20 +292,31 @@ func convertPullRequestHook(src *pullRequestHook) *scm.PullRequestHook {
 
 type (
 	pushHook struct {
-		ObjectKind   string      `json:"object_kind"`
-		EventName    string      `json:"event_name"`
-		Before       string      `json:"before"`
-		After        string      `json:"after"`
-		Ref          string      `json:"ref"`
-		CheckoutSha  string      `json:"checkout_sha"`
-		Message      interface{} `json:"message"`
-		UserID       int         `json:"user_id"`
-		UserName     string      `json:"user_name"`
-		UserUsername string      `json:"user_username"`
-		UserEmail    string      `json:"user_email"`
-		UserAvatar   string      `json:"user_avatar"`
-		ProjectID    int         `json:"project_id"`
-		Project      struct {
+		HookName   string `json:"hook_name"`
+		Namespace  string `json:"namespace"`
+		Before     string `json:"before"`
+		After      string `json:"after"`
+		Ref        string `json:"ref"`
+		HeadCommit struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+			Author  struct {
+				Name     string `json:"name"`
+				Email    string `json:"email"`
+				UserName string `json:"user_name"`
+				Username string `json:"username"`
+				Url      string `json:"url"`
+			} `json:"author"`
+			Committer
+			Url string `json:"url"`
+		}
+		Sender struct {
+			Login     string `json:"login"`
+			Name      string `json:"name"`
+			Email     string `json:"email"`
+			AvatarUrl string `json:"avatar_url"`
+		} `json:"sender"`
+		Project struct {
 			ID                int         `json:"id"`
 			Name              string      `json:"name"`
 			Description       string      `json:"description"`
@@ -330,11 +335,10 @@ type (
 			HTTPURL           string      `json:"http_url"`
 		} `json:"project"`
 		Commits []struct {
-			ID        string `json:"id"`
-			Message   string `json:"message"`
-			Timestamp string `json:"timestamp"`
-			URL       string `json:"url"`
-			Author    struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+			URL     string `json:"url"`
+			Author  struct {
 				Name  string `json:"name"`
 				Email string `json:"email"`
 			} `json:"author"`
@@ -344,13 +348,14 @@ type (
 		} `json:"commits"`
 		TotalCommitsCount int `json:"total_commits_count"`
 		Repository        struct {
-			Name            string `json:"name"`
-			URL             string `json:"url"`
-			Description     string `json:"description"`
-			Homepage        string `json:"homepage"`
-			GitHTTPURL      string `json:"git_http_url"`
-			GitSSHURL       string `json:"git_ssh_url"`
-			VisibilityLevel int    `json:"visibility_level"`
+			ID            string `json:"id"`
+			NameSpace     string `json:"namespace"`
+			Name          string `json:"name"`
+			GitUrl        string `json:"git_url"`
+			SshUrl        string `json:"ssh_url"`
+			HtmlUrl       string `json:"html_url"`
+			DefaultBranch string `json:"default_branch"`
+			Private       bool   `json:"private"`
 		} `json:"repository"`
 	}
 
@@ -669,7 +674,7 @@ type (
 	}
 
 	pullRequestHook struct {
-		ObjectKind string `json:"object_kind"`
+		ObjectKind string `json:"action"`
 		User       struct {
 			Name      string `json:"name"`
 			Username  string `json:"username"`
