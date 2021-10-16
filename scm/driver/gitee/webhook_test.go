@@ -28,21 +28,15 @@ func TestWebhooks(t *testing.T) {
 		// branch hooks
 		{
 			event:  "Push Hook",
-			before: "testdata/webhooks/branch_create.json",
-			after:  "testdata/webhooks/branch_create.json.golden",
+			before: "c87e1a34d652662015a1b9b4b91b557d41a48386",
+			after:  "0000000000000000000000000000000000000000",
 			obj:    new(scm.PushHook),
-		},
-		{
-			event:  "Push Hook",
-			before: "testdata/webhooks/branch_delete.json",
-			after:  "testdata/webhooks/branch_delete.json.golden",
-			obj:    new(scm.BranchHook),
 		},
 		// tag hooks
 		{
 			event:  "Tag Push Hook",
-			before: "testdata/webhooks/tag_create.json",
-			after:  "testdata/webhooks/tag_create.json.golden",
+			before: "0000000000000000000000000000000000000000",
+			after:  "80b5f68f59de29a595f622637fc4628e0fc75387",
 			obj:    new(scm.PushHook),
 		},
 		{

@@ -6,11 +6,11 @@ package gitee
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/drone/go-scm/scm"
 )
@@ -52,7 +52,7 @@ func (s *webhookService) Parse(req *http.Request, fn scm.SecretFunc) (scm.Webhoo
 		return hook, nil
 	}
 
-	if token != req.Header.Get("X-Gitlab-Token") {
+	if token != req.Header.Get("X-Gitee-Token") {
 		return hook, scm.ErrSignatureInvalid
 	}
 
@@ -91,8 +91,8 @@ func parsePullRequestHook(data []byte) (scm.Webhook, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch src.ObjectAttributes.Action {
-	case "open", "close", "reopen", "merge", "update":
+	switch src.Action {
+	case "open", "approved", "tested", "merge", "test", "assign":
 		// no-op
 	default:
 		return nil, scm.ErrUnknownEvent
@@ -231,61 +231,56 @@ func convertTagHook(src *pushHook) *scm.TagHook {
 
 func convertPullRequestHook(src *pullRequestHook) *scm.PullRequestHook {
 	action := scm.ActionSync
-	switch src.ObjectAttributes.Action {
+	switch src.Action {
 	case "open":
 		action = scm.ActionOpen
-	case "close":
-		action = scm.ActionClose
-	case "reopen":
-		action = scm.ActionReopen
+	case "tested":
+		action = scm.ActionTested
+	case "approved":
+		action = scm.ActionApproved
 	case "merge":
 		action = scm.ActionMerge
-	case "update":
-		action = scm.ActionSync
+	case "test":
+		action = scm.ActionTest
 	}
-	fork := scm.Join(
-		src.ObjectAttributes.Source.Namespace,
-		src.ObjectAttributes.Source.Name,
-	)
-	namespace, name := scm.Split(src.Project.PathWithNamespace)
 	return &scm.PullRequestHook{
 		Action: action,
 		PullRequest: scm.PullRequest{
-			Number: src.ObjectAttributes.Iid,
-			Title:  src.ObjectAttributes.Title,
-			Body:   src.ObjectAttributes.Description,
-			Sha:    src.ObjectAttributes.LastCommit.ID,
-			Ref:    fmt.Sprintf("refs/merge-requests/%d/head", src.ObjectAttributes.Iid),
-			Source: src.ObjectAttributes.SourceBranch,
-			Target: src.ObjectAttributes.TargetBranch,
-			Fork:   fork,
-			Link:   src.ObjectAttributes.URL,
-			Closed: src.ObjectAttributes.State != "opened",
-			Merged: src.ObjectAttributes.State == "merged",
-			// Created   : src.ObjectAttributes.CreatedAt,
-			// Updated  : src.ObjectAttributes.UpdatedAt, // 2017-12-10 17:01:11 UTC
+			Number:  src.PullRequest.ID,
+			Title:   src.PullRequest.Title,
+			Body:    src.PullRequest.Body,
+			Sha:     src.PullRequest.MergeCommitSha,
+			Ref:     src.PullRequest.MergeReferenceName,
+			Source:  src.PullRequest.Head.Ref,
+			Target:  src.PullRequest.Base.Ref,
+			Fork:    src.PullRequest.PathWithNamespace,
+			Link:    src.PullRequest.HtmlUrl,
+			Closed:  src.PullRequest.ClosedAt != nil,
+			Merged:  src.PullRequest.Merged,
+			Created: src.PullRequest.CreatedAt,
+			Updated: src.PullRequest.UpdatedAt,
 			Author: scm.User{
-				Login:  src.User.Username,
-				Name:   src.User.Name,
-				Email:  "", // TODO how do we get the pull request author email?
-				Avatar: src.User.AvatarURL,
+				Login:  src.PullRequest.User.Login,
+				Name:   src.PullRequest.User.Name,
+				Email:  src.PullRequest.User.Email, // TODO how do we get the pull request author email?
+				Avatar: src.PullRequest.User.AvatarUrl,
 			},
 		},
 		Repo: scm.Repository{
-			ID:        strconv.Itoa(src.Project.ID),
-			Namespace: namespace,
-			Name:      name,
-			Clone:     src.Project.GitHTTPURL,
-			CloneSSH:  src.Project.GitSSHURL,
-			Link:      src.Project.WebURL,
-			Branch:    src.Project.DefaultBranch,
-			Private:   false, // TODO how do we correctly set Private vs Public?
+			ID:        src.Repository.ID,
+			Namespace: src.Repository.Namespace,
+			Name:      src.Repository.Name,
+			Clone:     src.Repository.CloneUrl,
+			CloneSSH:  src.Repository.GitSshUrl,
+			Link:      src.Repository.HtmlUrl,
+			Branch:    src.Repository.DefaultBranch,
+			Private:   src.Repository.Private, // TODO how do we correctly set Private vs Public?
 		},
 		Sender: scm.User{
-			Login:  src.User.Username,
-			Name:   src.User.Name,
-			Email:  "", // TODO how do we get the pull request author email?
-			Avatar: src.User.AvatarURL,
+			Login:  src.Sender.Login,
+			Name:   src.Sender.Name,
+			Email:  src.Sender.Email,
+			Avatar: src.Sender.AvatarUrl,
 		},
 	}
 }
@@ -674,118 +669,54 @@ type (
 	}
 
 	pullRequestHook struct {
-		ObjectKind string `json:"action"`
-		User       struct {
+		Action string `json:"action"`
+		Author struct {
 			Name      string `json:"name"`
-			Username  string `json:"username"`
+			Username  string `json:"login"`
 			AvatarURL string `json:"avatar_url"`
-		} `json:"user"`
-		Project struct {
-			ID                int         `json:"id"`
-			Name              string      `json:"name"`
-			Description       string      `json:"description"`
-			WebURL            string      `json:"web_url"`
-			AvatarURL         interface{} `json:"avatar_url"`
-			GitSSHURL         string      `json:"git_ssh_url"`
-			GitHTTPURL        string      `json:"git_http_url"`
-			Namespace         string      `json:"namespace"`
-			VisibilityLevel   int         `json:"visibility_level"`
-			PathWithNamespace string      `json:"path_with_namespace"`
-			DefaultBranch     string      `json:"default_branch"`
-			CiConfigPath      interface{} `json:"ci_config_path"`
-			Homepage          string      `json:"homepage"`
-			URL               string      `json:"url"`
-			SSHURL            string      `json:"ssh_url"`
-			HTTPURL           string      `json:"http_url"`
-		} `json:"project"`
-		ObjectAttributes struct {
-			AssigneeID                interface{} `json:"assignee_id"`
-			AuthorID                  int         `json:"author_id"`
-			CreatedAt                 string      `json:"created_at"`
-			DeletedAt                 interface{} `json:"deleted_at"`
-			Description               string      `json:"description"`
-			HeadPipelineID            interface{} `json:"head_pipeline_id"`
-			ID                        int         `json:"id"`
-			Iid                       int         `json:"iid"`
-			LastEditedAt              interface{} `json:"last_edited_at"`
-			LastEditedByID            interface{} `json:"last_edited_by_id"`
-			MergeCommitSha            interface{} `json:"merge_commit_sha"`
-			MergeError                interface{} `json:"merge_error"`
-			MergeParams               interface{} `json:"-"`
-			MergeStatus               string      `json:"merge_status"`
-			MergeUserID               interface{} `json:"merge_user_id"`
-			MergeWhenPipelineSucceeds bool        `json:"merge_when_pipeline_succeeds"`
-			MilestoneID               interface{} `json:"milestone_id"`
-			SourceBranch              string      `json:"source_branch"`
-			SourceProjectID           int         `json:"source_project_id"`
-			State                     string      `json:"state"`
-			TargetBranch              string      `json:"target_branch"`
-			TargetProjectID           int         `json:"target_project_id"`
-			TimeEstimate              int         `json:"time_estimate"`
-			Title                     string      `json:"title"`
-			UpdatedAt                 string      `json:"updated_at"`
-			UpdatedByID               interface{} `json:"updated_by_id"`
-			URL                       string      `json:"url"`
-			Source                    struct {
-				ID                int         `json:"id"`
-				Name              string      `json:"name"`
-				Description       string      `json:"description"`
-				WebURL            string      `json:"web_url"`
-				AvatarURL         interface{} `json:"avatar_url"`
-				GitSSHURL         string      `json:"git_ssh_url"`
-				GitHTTPURL        string      `json:"git_http_url"`
-				Namespace         string      `json:"namespace"`
-				VisibilityLevel   int         `json:"visibility_level"`
-				PathWithNamespace string      `json:"path_with_namespace"`
-				DefaultBranch     string      `json:"default_branch"`
-				CiConfigPath      interface{} `json:"ci_config_path"`
-				Homepage          string      `json:"homepage"`
-				URL               string      `json:"url"`
-				SSHURL            string      `json:"ssh_url"`
-				HTTPURL           string      `json:"http_url"`
-			} `json:"source"`
-			Target struct {
-				ID                int         `json:"id"`
-				Name              string      `json:"name"`
-				Description       string      `json:"description"`
-				WebURL            string      `json:"web_url"`
-				AvatarURL         interface{} `json:"avatar_url"`
-				GitSSHURL         string      `json:"git_ssh_url"`
-				GitHTTPURL        string      `json:"git_http_url"`
-				Namespace         string      `json:"namespace"`
-				VisibilityLevel   int         `json:"visibility_level"`
-				PathWithNamespace string      `json:"path_with_namespace"`
-				DefaultBranch     string      `json:"default_branch"`
-				CiConfigPath      interface{} `json:"ci_config_path"`
-				Homepage          string      `json:"homepage"`
-				URL               string      `json:"url"`
-				SSHURL            string      `json:"ssh_url"`
-				HTTPURL           string      `json:"http_url"`
-			} `json:"target"`
-			LastCommit struct {
-				ID        string `json:"id"`
-				Message   string `json:"message"`
-				Timestamp string `json:"timestamp"`
-				URL       string `json:"url"`
-				Author    struct {
-					Name  string `json:"name"`
-					Email string `json:"email"`
-				} `json:"author"`
-			} `json:"last_commit"`
-			WorkInProgress      bool        `json:"work_in_progress"`
-			TotalTimeSpent      int         `json:"total_time_spent"`
-			HumanTotalTimeSpent interface{} `json:"human_total_time_spent"`
-			HumanTimeEstimate   interface{} `json:"human_time_estimate"`
-			Action              string      `json:"action"`
-		} `json:"object_attributes"`
-		Labels  []interface{} `json:"labels"`
-		Changes struct {
-		} `json:"changes"`
+		} `json:"author"`
+		PullRequest struct {
+			ID                 int        `json:"id"`
+			Title              string     `json:"title"`
+			Body               string     `json:"body"`
+			Sha                string     `json:"sha"`
+			Ref                string     `json:""`
+			PathWithNamespace  string     `json:"path_with_namespace"`
+			HtmlUrl            string     `json:"html_url"`
+			Merged             bool       `json:"merged"`
+			MergeCommitSha     string     `json:"merge_commit_sha"`
+			MergeReferenceName string     `json:"merge_reference_name"`
+			ClosedAt           *time.Time `json:"closed_at"`
+			CreatedAt          time.Time  `json:"created_at"`
+			UpdatedAt          time.Time  `json:"updated_at"`
+			Base               struct {
+				Ref string `json:"ref"`
+			} `json:"base"`
+			Head struct {
+				Ref string `json:"ref"`
+			} `json:"head"`
+			User struct {
+				Login     string `json:"login"`
+				Name      string `json:"name"`
+				Email     string `json:"email"`
+				AvatarUrl string `json:"avatar_url"`
+			}
+		} `json:"pull_request"`
 		Repository struct {
-			Name        string `json:"name"`
-			URL         string `json:"url"`
-			Description string `json:"description"`
-			Homepage    string `json:"homepage"`
+			ID            string `json:"id"`
+			Namespace     string `json:"namespace"`
+			Name          string `json:"name"`
+			CloneUrl      string `json:"clone_url"`
+			GitSshUrl     string `json:"git_ssh_url"`
+			HtmlUrl       string `json:"html_url"`
+			DefaultBranch string `json:"default_branch"`
+			Private       bool   `json:"private"`
 		} `json:"repository"`
+		Sender struct {
+			Login     string `json:"login"`
+			Name      string `json:"name"`
+			Email     string `json:"email"`
+			AvatarUrl string `json:"avatar_url"`
+		}
 	}
 )

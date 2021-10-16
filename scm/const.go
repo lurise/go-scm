@@ -40,6 +40,10 @@ const (
 	// pull requests
 	ActionSync
 	ActionMerge
+	ActionTest
+	ActionTested
+	ActionApproved
+	ActionAssign
 	// issue comment
 	ActionEdit
 )
